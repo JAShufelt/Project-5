@@ -1,0 +1,12 @@
+-*Add error handling to system calls
+-*Create header file for global variables,
+includes, & function prototypes.
+-*Create makefile
+-*rename test() function to something
+-*rename .cpp and .h to philosopher.cpp/.h
+like "philosopher handler"
+-*Add timestamps to all output messages
+-*Fix compilation warning messages
+
+-Remove unused variables/functions
+-Overall clean up and organize code
