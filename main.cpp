@@ -35,6 +35,14 @@ void* philosopherRoutine(int connecting_socket);
 
 void* coordinatorPhilosopherRoutine(void* nothing);
 
+int calcLeftFork(char* message_buffer, int buffer_size);
+
+int calcRightFork(char* message_buffer, int buffer_size);
+
+int calcSocketDescriptor(char* message_buffer, int buffer_size);
+
+int calcPhiloID(char* message_buffer, int buffer_size);
+
 vector<int> philo_SDs;
 
 vector<int> forks;
@@ -51,20 +59,11 @@ pthread_cond_t coord_philo_cond;
 
 int phil_id;
 
-typedef struct Request{
-    int socket_desc;
-    int philosopher_id;
-    int left_fork;
-    int right_fork;
-}Request;
-
-Request requestTranslator(char* message_buffer, int buffer_size);
+//Request requestTranslator(char* message_buffer, int buffer_size);
 
 void coordinatorRoutine();
 
 int server_socket;
-
-vector<Request> request_vector;
 
 int main(int argc, char* argv[])
 {
@@ -219,7 +218,7 @@ int main(int argc, char* argv[])
         }
 
         //FOR TESTING ONLY, REMOVE IN FINAL BUILD
-        ids[0] = 999;
+        //ids[0] = 999;
 
         memset(message_buffer, 0, sizeof(message_buffer));
 
@@ -508,6 +507,8 @@ void connectCoordinator(int coordinator_port)
     }
     else
     {
+        recv(connecting_socket,message_buffer,sizeof(message_buffer), 0);
+        printf("%s\n", message_buffer);
         philosopherRoutine(connecting_socket);
     }
 }
@@ -515,123 +516,92 @@ void connectCoordinator(int coordinator_port)
 //Run by the coordinator to accept incoming philosopher connections
 void* coordinatorAccept(void* server_socket)
 {
-    printf("Whoopdie scoop\n");
+    int SD[10];
+    int temp;
+    pipe(fd);
 
     int server_sock = *(int*)server_socket;
+    char message_buffer[BUFFERSIZE];
+    strcpy(message_buffer, "Message from coordinator\n");
 
+    //Establish pipe towards main thread.
     pipe(fd);
 
     pthread_mutex_lock(&output);
     printf("Coordinator Accept Thread started.\n");
-    printf("Server sock passed was, %d\n", server_sock);
     pthread_mutex_unlock(&output);
-
 
     //vector<pthread_t> threads;
     pthread_t threads[6];
 
     pthread_t new_thread0;
+    threads[0] = new_thread0;
     pthread_t new_thread1;
+    threads[1] = new_thread1;
     pthread_t new_thread2;
+    threads[2] = new_thread2;
     pthread_t new_thread3;
+    threads[3] = new_thread3;
     pthread_t new_thread4;
+    threads[4] = new_thread4;
     pthread_t new_thread5;
 
-    /*for(int i = 0; i < 5; i++)
+    for(int i = 0; i < 4; i++)
     {
-        pthread_t new_thread;
-        threads[i] = new_thread;
-    }*/
+        temp = accept(server_sock, NULL, NULL);
+        send(temp,message_buffer,sizeof(message_buffer),0);
+        SD[i] = temp;
+        pthread_create(&threads[i],NULL,&test,(void*)&SD[i]);
 
-    /*for(int i = 0; i < 4; i++)
-    {
-        int temp = accept(server_sock, NULL, NULL);
-        philo_SDs.push_back(temp);
-        pthread_create(&threads[i],NULL,&test,(void*)&philo_SDs[i]);
-    }*/
-
-    int temp = accept(server_sock, NULL, NULL);
-    philo_SDs.push_back(temp);
-    pthread_create(&new_thread0,NULL,&test,(void*)&philo_SDs[0]);
-    if(temp == -1)
-    {
-        pthread_mutex_lock(&output);
-        printf("FAILED TO ACCEPT CONNECTION.");
-        pthread_mutex_unlock(&output);
-        exit(3);
+        if(temp == -1)
+        {
+            pthread_mutex_lock(&output);
+            printf("FAILED TO ACCEPT CONNECTION.");
+            pthread_mutex_unlock(&output);
+            exit(3);
+        }
     }
 
-    temp = accept(server_sock, NULL, NULL);
-    philo_SDs.push_back(temp);
-    pthread_create(&new_thread1,NULL,&test,(void*)&philo_SDs[1]);
-
-    if(temp == -1)
-    {
-        pthread_mutex_lock(&output);
-        printf("FAILED TO ACCEPT CONNECTION.");
-        pthread_mutex_unlock(&output);
-        exit(3);
-    }
-
-    temp = accept(server_sock, NULL, NULL);
-    philo_SDs.push_back(temp);
-    pthread_create(&new_thread2,NULL,&test,(void*)&philo_SDs[2]);
-
-    if(temp == -1)
-    {
-        pthread_mutex_lock(&output);
-        printf("FAILED TO ACCEPT CONNECTION.");
-        pthread_mutex_unlock(&output);
-        exit(3);
-    }
-
-    temp = accept(server_sock, NULL, NULL);
-    philo_SDs.push_back(temp);
-    pthread_create(&new_thread3,NULL,&test,(void*)&philo_SDs[3]);
-
-    if(temp == -1)
-    {
-        pthread_mutex_lock(&output);
-        printf("FAILED TO ACCEPT CONNECTION.");
-        pthread_mutex_unlock(&output);
-        exit(3);
-    }
-
-    pthread_create(&new_thread4, NULL,&coordinatorPhilosopherRoutine,NULL);
-
-    pthread_mutex_lock(&output);
-    printf("MADE IT HERE\n");
-    pthread_mutex_unlock(&output);
+    pthread_create(&threads[4],NULL,&coordinatorPhilosopherRoutine,NULL);
 
     coordinatorRoutine();
 }
 
 void* test(void* nothing)
 {
-    char message_buffer[BUFFERSIZE];
-    strcpy(message_buffer, "DEFAULT VALUE");
-    char temp[11];
-    Request* new_request = new Request;
-
-    int philo_SD = *(int*)nothing;
-    snprintf(temp,10,"%d",philo_SD);
-
-    //printf("DUDE THIS IS WHAT I GOT: %d", philo_SD);
-    recv(philo_SD,message_buffer,BUFFERSIZE, 0);
-
     int left_fork;
     int right_fork;
+    int philo_SD = *(int*)nothing;
+    char begin_message[BUFFERSIZE];
+    strcpy(begin_message,"Begin philosopher routine.");
+
+    char message_buffer[BUFFERSIZE];
+    strcpy(message_buffer, "DEFAULT VALUE");
+
+    char temp[11];
+    snprintf(temp,10,"%d",philo_SD);
+
+    //Receive connection confirmation from philosopher
+    recv(philo_SD,message_buffer,BUFFERSIZE, 0);
+    if(message_buffer[0] == 'D')
+    {
+        message_buffer[0] = 'F';
+        send(philo_SD, message_buffer,sizeof(message_buffer), 0);
+    }
+
+    //Forward connection confirmation to main thread (PROBABLY GOING TO REMOVE THIS IN FUTURE) !!!!!!!!!!!!!!!!!!!
+    //write(fd[1], message_buffer, sizeof(message_buffer));
 
     pthread_mutex_lock(&lock);
-
     pthread_mutex_lock(&output);
     fflush(stdout);
-    printf("Connection handling subthread created...\n");
+    printf("|COORDINATOR| Connection handling subthread created...\n");
     printf("%s\n", message_buffer);
     pthread_mutex_unlock(&output);
-
     pthread_mutex_unlock(&lock);
 
+    //Send begin message to philosopher
+    send(philo_SD, begin_message,sizeof(begin_message),0);
     while(1)
     {
         //Receive eating request
@@ -639,29 +609,27 @@ void* test(void* nothing)
         strcat(message_buffer,temp);
         strcat(message_buffer,",");
 
+        //Print eating request
         pthread_mutex_lock(&output);
-        printf("%s\n", message_buffer);
+        printf("|COORDINATOR| RECEIVED REQUEST: %s\n", message_buffer);
         pthread_mutex_unlock(&output);
 
-        //sleep(1000);
-
+        //Forward eating request to main thread
         write(fd[1],message_buffer,sizeof(message_buffer));
-
-         sleep(1000);
 
         //Receive deallocation request
         recv(philo_SD,message_buffer,BUFFERSIZE,0);
+        left_fork = calcLeftFork(message_buffer,sizeof(message_buffer));
+        right_fork = calcRightFork(message_buffer, sizeof(message_buffer));
+
+        //Print deallocation request
+        pthread_mutex_lock(&output);
+        printf("|COORDINATOR| Deallocating, LEFT: %d RIGHT: %d\n", left_fork, right_fork);
+        pthread_mutex_unlock(&output);
 
         pthread_mutex_lock(&forks_lock);
-
-        *new_request = requestTranslator(message_buffer,BUFFERSIZE);
-        new_request->socket_desc = philo_SD;
-        left_fork = new_request->left_fork;
-        right_fork = new_request->right_fork;
-
         forks[left_fork] = 1;
         forks[right_fork] = 1;
-
         pthread_mutex_unlock(&forks_lock);
     }
 
@@ -677,6 +645,7 @@ void* philosopherRoutine(int connecting_socket)
     char left[10];
     char right[10];
 
+    char begin_message[BUFFERSIZE];
     char message_buffer[BUFFERSIZE];
     char request_message[BUFFERSIZE];
     char deallocate_message[BUFFERSIZE];
@@ -690,7 +659,6 @@ void* philosopherRoutine(int connecting_socket)
 
     printf("Connection to Coordinator was Success!\n");
     printf("Sending message: %s\n", message_buffer);
-    printf("NODE NUM: %d\n", node_num);
     send(connecting_socket,message_buffer, sizeof(message_buffer), 0);
 
     //Thinking and eating duration randomly set between 2 and 10 seconds for each philosopher.
@@ -729,11 +697,12 @@ void* philosopherRoutine(int connecting_socket)
     strcpy(deallocate_message,request_message);
     deallocate_message[0] = 'D';
 
+    recv(connecting_socket,&begin_message,sizeof(begin_message),0);
+    printf("BEGIN MESSAGE: %s", begin_message);
+
     int a = 1;
     while(a == 1)
     {
-        a = 2;
-
         printf("Begin thinking for %d seconds\n", think_duration);
         sleep(eat_duration);
         printf("Done thinking\n");
@@ -741,7 +710,10 @@ void* philosopherRoutine(int connecting_socket)
         printf("Requesting left fork\n");
         printf("Requesting right fork\n");
 
+        //Send fork/eat request to monitoring thread.
         send(connecting_socket,request_message,sizeof(request_message), 0);
+
+        //Receive fork permission from main thread.
         recv(connecting_socket,&message_buffer,sizeof(message_buffer), 0);
 
         printf("Left fork acquired\n");
@@ -750,16 +722,24 @@ void* philosopherRoutine(int connecting_socket)
         sleep(eat_duration);
         printf("Done eating\n");
 
+        //Send deallocation request to monitoring thread.
         send(connecting_socket,deallocate_message,sizeof(deallocate_message), 0);
     }
 }
 
 void* coordinatorPhilosopherRoutine(void* nothing)
 {
-    sleep(1000);
-
     int left_fork;
     int right_fork;
+
+    char temp[10];
+    char sd[11];
+    char left[10];
+    char right[10];
+    char request_message[BUFFERSIZE];
+
+    snprintf(temp,10,"%d",phil_id);
+    strcpy(sd, "-1");
 
     //Sleeping and eating duration randomly set between 2 and 10 seconds for each philosopher.
     srand(phil_id);
@@ -777,14 +757,26 @@ void* coordinatorPhilosopherRoutine(void* nothing)
         right_fork = left_fork - 1;
     }
 
-    //Construct request struct
-    Request coord_philo_request = {-1,phil_id,left_fork,right_fork};
+    snprintf(left,10,"%d",left_fork);
+    snprintf(right,10,"%d",right_fork);
+
+    //Construct request message.
+    memset(request_message,0,sizeof(request_message));
+    strcpy(request_message, "R");
+    strcat(request_message,temp);
+    strcat(request_message, ",");
+    strcat(request_message,sd);
+    strcat(request_message, ",");
+    strcat(request_message,left);
+    strcat(request_message, ",");
+    strcat(request_message,right);
+    strcat(request_message, ",");
+    strcat(request_message, sd);
+    strcat(request_message, ",");
 
     int a = 1;
     while(a == 1)
     {
-        a = 2;
-
         pthread_mutex_lock(&output);
         printf("Begin thinking for %d seconds\n", think_duration);
         pthread_mutex_unlock(&output);
@@ -797,16 +789,12 @@ void* coordinatorPhilosopherRoutine(void* nothing)
         pthread_mutex_lock(&output);
         printf("Requesting left fork\n");
         printf("Requesting right fork\n");
+        printf("|COORDINATOR| RECEIVED REQUEST: %s\n", request_message);
         pthread_mutex_unlock(&output);
 
-        request_vector.push_back(coord_philo_request);
+        write(fd[1],request_message,sizeof(request_message));
+
         pthread_cond_wait(&coord_philo_cond,&coord_philo_lock); //Wait on signal from Coordinator thread
-        pthread_mutex_lock(&forks_lock);
-
-        forks[left_fork] = 0;
-        forks[right_fork] = 0;
-
-        pthread_mutex_unlock(&forks_lock);
         pthread_mutex_unlock(&coord_philo_lock);
 
         pthread_mutex_lock(&output);
@@ -822,7 +810,6 @@ void* coordinatorPhilosopherRoutine(void* nothing)
         pthread_mutex_unlock(&output);
 
         //Deallocate resources
-
         pthread_mutex_lock(&forks_lock);
         forks[left_fork] = 1;
         forks[right_fork] = 1;
@@ -839,80 +826,102 @@ void coordinatorRoutine()
     int requested_SD;
     int requested_ID;
     char message_buffer[BUFFERSIZE];
+    char grant_request[BUFFERSIZE];
 
     memset(message_buffer,0,sizeof(message_buffer));
-    strcpy(message_buffer, "Eating request granted...\n");
+    //strcpy(message_buffer, "Eating request granted...\n");
+
+    memset(grant_request,0,sizeof(grant_request));
+    strcpy(grant_request, "Eating request granted...\n");
 
     for(int i = 0; i < 5; i++)
     {
         forks.push_back(1);
     }
 
-    pthread_mutex_lock(&output);
-    printf("MADE IT HERE YAYAYAYYAY\n");
-    pthread_mutex_unlock(&output);
-
-    sleep(3);
-
     while(1)
     {
         read(fd[0],message_buffer,sizeof(message_buffer));
-        printf("HANDLING THIS REQUEST: %s\n", message_buffer);
+
+        pthread_mutex_lock(&output);
+        printf("|COORDINATOR| HANDLING REQUEST: %s\n", message_buffer);
+        requested_ID = calcPhiloID(message_buffer, sizeof(message_buffer));
+        //printf("DECODING: ID: %d\n", requested_ID);
+
+        requested_left = calcLeftFork(message_buffer, sizeof(message_buffer));
+        //printf("DECODING: Left Fork: %d\n", requested_left);
+
+        requested_right = calcRightFork(message_buffer, sizeof(message_buffer));
+        //printf("DECODING: Right Fork: %d\n", requested_right);
+
+        requested_SD = calcSocketDescriptor(message_buffer, sizeof(message_buffer));
+        //printf("DECODING: Socket Descriptor: %d\n", requested_SD);
+        pthread_mutex_unlock(&output);
 
         while(1)
         {
-
-        }
-
-        if(request_vector.size() > 0)
-        {
-            printf("RIGHT HERE MAN\n");
-
-            sleep(10);
-
-            requested_left = request_vector[0].left_fork;
-            requested_right = request_vector[0].right_fork;
-            requested_ID = request_vector[0].philosopher_id;
-            requested_SD = request_vector[0].socket_desc;
-
-            //if forks are available, send eat message to philosopher
-            if((forks[requested_left] == 1) && (forks[requested_right] == 1))
+            //If request came from another process
+            if(requested_SD != -1)
             {
-                if(requested_SD != -1)
+                if((forks[requested_left] == 1) && (forks[requested_right] == 1))
                 {
                     pthread_mutex_lock(&forks_lock);
                     forks[requested_left] = 0;
                     forks[requested_right] = 0;
                     pthread_mutex_unlock(&forks_lock);
 
-                    send(requested_SD,message_buffer,sizeof(message_buffer),0);
+                    //Send request grant to requesting process
+                    send(requested_SD,grant_request,sizeof(grant_request),0);
+                    pthread_mutex_lock(&output);
+                    printf("PHIL ID: %d, may begin eating.\n", requested_ID);
+                    printf("ALLOCATING LEFT FORK: %d RIGHT FORK: %d\n", requested_left, requested_right);
+                    pthread_mutex_unlock(&output);
+                    break;
                 }
-                else
-                {
-                    pthread_cond_broadcast(&coord_philo_cond);
-                }
-
-                pthread_mutex_lock(&lock);
-                fflush(stdout);
-                printf("Granting request to ID: %d\n", requested_ID);
-                pthread_mutex_unlock(&lock);
-                request_vector.erase(request_vector.begin());
             }
+            //If request came from this process (philosopher thread)
+            else
+            {
+                if((forks[requested_left] == 1) && (forks[requested_right] == 1))
+                {
+                    pthread_mutex_lock(&forks_lock);
+                    forks[requested_left] = 0;
+                    forks[requested_right] = 0;
+                    pthread_mutex_unlock(&forks_lock);
 
+                    pthread_mutex_lock(&coord_philo_lock);
+                    pthread_cond_broadcast(&coord_philo_cond);
+                    pthread_mutex_unlock(&coord_philo_lock);
+                    break;
+                }
+            }
         }
-
     }
 }
 
-Request requestTranslator(char* message_buffer, int buffer_size)
+int calcLeftFork(char* message_buffer, int buffer_size)
 {
-    Request new_request;
+    int left_fork;
+    int start_index = 0;
+    int comma_count = 0;
+    char temp[11];
 
-    char temp[10];
+    //Find start index of second comma
+    for(int i = 0; i < buffer_size; i++)
+    {
+        if(message_buffer[i] == ',')
+        {
+            comma_count++;
+            if(comma_count == 2)
+            {
+                start_index = i + 1;
+                break;
+            }
+        }
+    }
+
     int j = 0;
-    int comma_count;
-
-    for(int i = 1; i < buffer_size; i++)
+    for(int i = start_index; i < buffer_size; i++)
     {
         if(message_buffer[i] != ',')
         {
@@ -922,29 +931,112 @@ Request requestTranslator(char* message_buffer, int buffer_size)
         else
         {
             temp[j] = '\0';
-            comma_count++;
-
-            if(comma_count == 1)
-            {
-                new_request.philosopher_id = atoi(temp);
-            }
-            else if(comma_count == 2)
-            {
-                new_request.socket_desc = atoi(temp);
-            }
-            else if(comma_count == 3)
-            {
-                new_request.left_fork = atoi(temp);
-            }
-            else if(comma_count == 4)
-            {
-                new_request.right_fork = atoi(temp);
-            }
-
-            memset(temp,0,sizeof(temp));
-            j = 0;
+            break;
         }
     }
 
-    return new_request;
+    return atoi(temp);
+}
+
+int calcRightFork(char* message_buffer, int buffer_size)
+{
+    int right_fork;
+    int start_index = 0;
+    int comma_count = 0;
+    char temp[11];
+
+    //Find start index of second comma
+    for(int i = 0; i < buffer_size; i++)
+    {
+        if(message_buffer[i] == ',')
+        {
+            comma_count++;
+            if(comma_count == 3)
+            {
+                start_index = i + 1;
+                break;
+            }
+        }
+    }
+
+    int j = 0;
+    for(int i = start_index; i < buffer_size; i++)
+    {
+        if(message_buffer[i] != ',')
+        {
+            temp[j] = message_buffer[i];
+            j++;
+        }
+        else
+        {
+            temp[j] = '\0';
+            break;
+        }
+    }
+
+    return atoi(temp);
+}
+
+int calcSocketDescriptor(char* message_buffer, int buffer_size)
+{
+    int socket_descriptor;
+    int start_index = 0;
+    int comma_count = 0;
+    char temp[11];
+
+    //Find start index of second comma
+    for(int i = 0; i < buffer_size; i++)
+    {
+        if(message_buffer[i] == ',')
+        {
+            comma_count++;
+            if(comma_count == 4)
+            {
+                start_index = i + 1;
+                break;
+            }
+        }
+    }
+
+    int j = 0;
+    for(int i = start_index; i < buffer_size; i++)
+    {
+        if(message_buffer[i] != ',')
+        {
+            temp[j] = message_buffer[i];
+            j++;
+        }
+        else
+        {
+            temp[j] = '\0';
+            break;
+        }
+    }
+
+    return atoi(temp);
+}
+
+int calcPhiloID(char* message_buffer, int buffer_size)
+{
+    int philo_id;
+    int start_index = 1;
+    int comma_count = 0;
+    char temp[11];
+
+    int j = 0;
+    for(int i = start_index; i < buffer_size; i++)
+    {
+        if(message_buffer[i] != ',')
+        {
+            temp[j] = message_buffer[i];
+            j++;
+        }
+        else
+        {
+            temp[j] = '\0';
+            break;
+        }
+    }
+
+    return atoi(temp);
 }
