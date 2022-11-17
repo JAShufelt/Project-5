@@ -63,8 +63,6 @@ pthread_cond_t coord_philo_cond;
 
 int phil_id;
 
-//Request requestTranslator(char* message_buffer, int buffer_size);
-
 void coordinatorRoutine();
 
 int server_socket;
