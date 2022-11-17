@@ -15,6 +15,10 @@
 #define BUFFERSIZE 100
 #endif // BUFFERSIZE
 
+#ifndef RUNDUR
+#define RUNDUR 99999999
+#endif // RUNDUR
+
 using namespace std;
 
 int extract_port(char* buffer, int buffer_size);
@@ -25,7 +29,7 @@ int extract_id(int home_port_num, char* buffer, int buffer_size);
 
 void* coordinatorAccept(void* server_socket);
 
-void* test(void* nothing);
+void* philosopher_handler(void* nothing);
 
 void connectCoordinator(int coordinator_port);
 
